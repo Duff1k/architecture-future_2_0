@@ -1,0 +1,87 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+System_Boundary(dom_clinic, "Клиники / EMR") {
+  Container(clinic_emr, "EMR (медкарты, PHI)", "HIS/EMR", "PHI хранится здесь; в аналитику не передаём")
+}
+
+System_Boundary(dom_fin, "Финтех / Банк") {
+  Container(fin_core, "Ядро финтех", "Golang/Java", "Счета, транзакции, кредиты, KYC/AML")
+}
+
+System_Boundary(dom_pharma, "Фарма / SCM") {
+  Container(pharma, "ERP/WMS (фарма)", "ERP", "Закупки/продажи, запасы, логистика")
+}
+
+System_Boundary(dom_devices, "Мед-устройства и IoT") {
+  Container(iot, "Телеметрия устройств", "IoT", "События приборов, сервисные логи")
+}
+
+System_Boundary(dom_ai, "ИИ-медицина") {
+  Container(ai, "AI-сервисы", "Python", "Inference, оффлайн/онлайн модели")
+}
+
+System_Boundary(dom_mdm_boundary, "Customer 360 и MDM") {
+  Container(mdm, "MDM / справочники", "MDM", "Золотые записи клиентов и контрагентов")
+}
+
+System_Boundary(dom_idp, "Идентификация и доступ") {
+  Container(idp, "IdP/SSO", "OIDC/SAML", "ABAC/RBAC, группы и атрибуты")
+}
+
+System_Boundary(dom_int, "Интеграции / API и события") {
+  Container(api_gw, "API-шлюз", "API", "Синхронные интеграции и выгрузки")
+  Container(kafka, "Событийная шина", "Kafka/Redpanda", "Доменные события и CDC")
+  Container(cdc, "CDC-коннекторы", "CDC", "Извлечение изменений из источников")
+}
+
+System_Boundary(dom_platform, "Платформа данных") {
+  ContainerDb(lake_raw, "Lakehouse: Raw (сырьевая зона)", "Object Storage", "Сырые события/выгрузки")
+  ContainerDb(lake_ref, "Lakehouse: Refined (нормализация)", "SQL-on-Lake", "Очистка, джойны, бизнес-модели")
+  ContainerDb(lake_cur, "Lakehouse: Curated (витрины)", "SQL-on-Lake", "Датапродукты/марты для потребления")
+  Container(orch, "Оркестрация", "Airflow/Dagster", "ELT/ETL пайплайны и расписания")
+  Container(cat, "Каталог и lineage", "Data Catalog", "Поиск, владельцы, SLA, происхождение")
+  Container(gov, "Governance и privacy", "DLP/Policy", "Псевдонимизация, маскирование, аудит")
+  Container(dq, "Качество данных", "DQ/Monitoring", "Тесты DQ, алерты, SLO")
+  Container(fs, "Feature Store", "FS", "Фичи для моделей (онлайн/оффлайн)")
+}
+
+System_Boundary(dom_analytics, "Аналитика и самообслуживание") {
+  Container(sem, "Семантический слой", "Metrics/Headless BI", "Единые метрики и логика срезов")
+  Container(bi, "BI", "Power BI и др.", "Дашборды, ad-hoc запросы")
+  Container(portal, "Портал данных", "Web", "Каталог, заявки на доступ, Data Shop")
+}
+
+Container(legacy_dwh, "Legacy DWH", "SQL Server 2008", "Монолитная логика; источник через CDC (миграция)")
+
+Rel(clinic_emr, cdc, "CDC/выгрузки БЕЗ PHI для аналитики")
+Rel(fin_core, kafka, "Доменные события: платежи/счета/кредиты/KYC")
+Rel(pharma, kafka, "События ERP/SCM: отгрузки, остатки, заказы")
+Rel(iot, kafka, "Телеметрия и алерты устройств")
+Rel(legacy_dwh, cdc, "CDC/экстракции из легаси (временный источник)")
+
+Rel(cdc, kafka, "Публикация изменений (CDC) в шину")
+Rel(kafka, lake_raw, "Стриминг событий в Raw")
+Rel(api_gw, lake_raw, "Пакетные/API-выгрузки в Raw")
+
+Rel(lake_raw, orch, "Запуск ELT-пайплайнов")
+Rel(orch, lake_ref, "Очистка/нормализация/бизнес-правила → Refined")
+Rel(mdm, lake_ref, "Слияние дубликатов и справочники (golden records)")
+Rel(lake_ref, dq, "Проверки качества (DQ) и мониторинг")
+Rel(lake_ref, gov, "Классификация чувствительных полей, маскирование")
+Rel(gov, lake_cur, "Публикация безопасных витрин (Curated)")
+Rel(lake_ref, fs, "Материализация фич для моделей")
+Rel(fs, ai, "Подача фич онлайн/оффлайн")
+
+Rel(lake_cur, sem, "Витрины Curated становятся источником метрик")
+Rel(sem, bi, "Доступ BI к единым метрикам")
+Rel(portal, cat, "Поиск датасетов, владельцев, SLA, lineage")
+Rel(portal, gov, "Заявки на доступ, согласования и аудит")
+
+Rel(idp, portal, "SSO и атрибуты пользователя")
+Rel(idp, bi, "SSO")
+Rel(idp, gov, "ABAC/RBAC политики доступа")
+
+SHOW_LEGEND()
+@enduml

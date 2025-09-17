@@ -1,0 +1,62 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+
+LAYOUT_WITH_LEGEND()
+
+
+Person(biz_user, "Бизнес‑пользователь", "Доменные аналитики, руководители")
+Person(data_analyst, "Дата‑аналитик", "Создаёт отчёты и датасеты")
+Person(data_scientist, "Дата‑сайентист", "Строит модели, экспериментирует")
+Person(fin_ops, "Финансовые операционисты", "Операционные отчёты, сверки")
+Person(compliance, "Комплаенс/ИБ", "Политики доступа, аудит")
+Person(clinician, "Врач/клинический пользователь", "Работает с ИИ‑сервисами и EMR (внутри медицинского домена)")
+
+
+System_Boundary(prod, "Будущее 2.0 — Целевая платформа данных (через год)") {
+Container(selfservice, "Портал самообслуживания данных", "Web (React/Next.js)", "Каталог датасетов, конструктор отчётов, Data Shop, запрос доступа")
+Container(bi_semantic, "Семантический слой BI", "Semantic/Metric layer", "Единые метрики, логика срезов, дата‑марты для BI")
+Container(bi_tool, "BI (Power BI / др.)", "Analytics/BI", "Дашборды, Ad‑hoc аналитика")
+
+Container_Boundary(data_platform, "Общая платформа данных (Data Platform)") {
+ContainerDb(lakehouse, "Хранилище данных (Lakehouse)", "Object Storage + SQL Engine", "Зональная модель: Raw / Refined / Curated. Не хранит PHI для аналитики.")
+Container(etl_orchestration, "Оркестрация и трансформации", "Orchestrator + ELT/ETL", "Пайплайны, расписания, качество данных")
+Container(streaming, "Стриминговая шина событий", "Kafka/Redpanda", "События доменов, CDC из легаси")
+Container(metadata, "Метаданные и каталог", "Data Catalog + Lineage", "Поиск, описание, SLA, владельцы, lineage")
+Container(gov, "Де‑идентификация и доступ", "Privacy/Governance", "Pseudonymization, DLP, ABAC/RBAC, маскирование колонок")
+Container(mdm, "Customer 360 / MDM", "Master Data Mgmt", "Справочники, доменные словари, золотые записи клиентов")
+}
+
+Container_Boundary(legacy_boundary, "Легаси и операционные домены") {
+Container(legacy_dwh, "Легаси DWH", "MS SQL Server 2008", "Текущее хранилище с бизнес‑логикой, интерфейсы PowerBuilder")
+Container(clinic_emr, "EMR/Клиники", "HIS/EMR", "Медкарты, истории болезни (PHI), за пределами аналитики")
+Container(ai_services, "ИИ‑сервисы", "Python", "Обработка медданных, inference, обучение на де‑идентифицированных данных")
+Container(fintech_core, "Финтех‑сервисы", "Golang/Java", "Банковские продукты, счета, кредиты, транзакции")
+Container(pharma_erp, "Фарма‑компании (ERP)", "ERP/WMS", "Продажи/закупки, запасы, логистика")
+Container(med_iot, "Производитель мед‑электроники (IoT)", "IoT/Telemetry", "Телеметрия устройств, журналы, сервисные события")
+Container(integration, "Интеграционный слой", "Camel + API Gateway", "API, CDC коннекторы, интеграция доменов и платформы")
+Container(idp, "Единая идентификация", "IdP/SSO", "OIDC/SAML, группы доступа, атрибуты")
+}
+}
+
+Rel(biz_user, selfservice, "Ищет и заказывает датасеты/отчёты")
+Rel(data_analyst, bi_tool, "Создаёт отчёты, строит модели данных")
+Rel(data_scientist, lakehouse, "Доступ к песочницам и фичах", "через политики доступа")
+Rel(fin_ops, bi_tool, "Операционные витрины, сверки")
+Rel(compliance, metadata, "Аудит, lineage, политики")
+Rel(clinician, ai_services, "Клинические сценарии")
+
+
+Rel(integration, streaming, "Публикация доменных событий и CDC")
+Rel(legacy_dwh, integration, "CDC из SQL 2008 / выгрузки")
+Rel(fintech_core, integration, "Транзакции, продукты, счета (события)")
+Rel(pharma_erp, integration, "ERP/SCM события и выгрузки")
+Rel(med_iot, integration, "Телеметрия, события устройств")
+Rel(clinic_emr, integration, "Только метаданные/счета и операционные данные без PHI")
+
+Rel(streaming, lakehouse, "Стриминг в Raw зону")
+Rel(integration, lakehouse, "Batch/ELT в Raw зону")
+Rel(etl_orchestration, lakehouse, "Трансформации в Refined/Curated")
+Rel(lakehouse, bi_semantic, "Модели и витрины (Curated)")
+Rel(bi_semantic, bi_tool, "Доступ к унифицированным метрикам")
+@enduml
